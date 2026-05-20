@@ -2,7 +2,7 @@
   "version": 2,
   "functions": {
     "api/pipeline.py": {
-      "runtime": "vercel-python@3.0.0"
+      "runtime": "@vercel/python"
     }
   },
   "routes": [
