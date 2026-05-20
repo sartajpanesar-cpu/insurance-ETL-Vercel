@@ -1,20 +1,10 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/pipeline.py",
-      "use": "@vercel/python",
-      "config": { "maxLambdaSize": "50mb" }
-    },
-    {
-      "src": "index.html",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "mapping/field_mapping.json",
-      "use": "@vercel/static"
+  "functions": {
+    "api/pipeline.py": {
+      "runtime": "vercel-python@3.0.0"
     }
-  ],
+  },
   "routes": [
     {
       "src": "/api/pipeline",
@@ -24,10 +14,5 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ],
-  "functions": {
-    "api/pipeline.py": {
-      "maxDuration": 60
-    }
-  }
+  ]
 }
