@@ -423,6 +423,64 @@
   .spec-table td.pos { color: var(--accent); }
   .spec-table td.src { color: var(--text-mono); }
 
+  /* ── LLM insight panels ── */
+  .llm-panel {
+    background: var(--surface2);
+    border: 1px solid rgba(45,212,191,0.25);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .llm-panel .llm-head {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 10px;
+  }
+  .llm-panel .llm-head::before {
+    content: 'AI'; font-size: 9px; font-weight: 700;
+    padding: 2px 5px; border-radius: 3px;
+    background: var(--accent); color: var(--navy);
+  }
+  .llm-panel .llm-body {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--text-dim); line-height: 1.6;
+  }
+  .llm-panel .llm-item {
+    padding: 5px 0; border-bottom: 1px solid rgba(36,63,120,0.4);
+  }
+  .llm-panel .llm-item:last-child { border-bottom: none; }
+  .llm-panel .llm-item strong { color: var(--text); font-weight: 500; }
+  .llm-panel .llm-item .rec-reprocess { color: var(--green); }
+  .llm-panel .llm-item .rec-manual { color: var(--amber); }
+  .llm-panel.warn {
+    border-color: rgba(251,191,36,0.25);
+  }
+  .llm-panel.warn .llm-head { color: var(--amber); }
+  .llm-panel.warn .llm-head::before { background: var(--amber); }
+
+  .llm-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(45,212,191,0.1);
+    border: 1px solid rgba(45,212,191,0.3);
+    border-radius: 3px;
+    padding: 2px 6px;
+  }
+  .llm-badge.off {
+    color: var(--text-dim);
+    background: rgba(148,163,184,0.05);
+    border-color: rgba(148,163,184,0.2);
+  }
+
   /* Reset link */
   .reset-link {
     display: block;
@@ -494,7 +552,10 @@
 
     <!-- Stats -->
     <div class="card">
-      <div class="card-title">// Run Summary</div>
+      <div class="card-title">
+        // Run Summary
+        <span id="llm-status-badge"></span>
+      </div>
       <div class="stat-grid">
         <div class="stat">
           <div class="stat-val blue" id="stat-total">—</div>
@@ -515,6 +576,12 @@
       </div>
       <div style="font-family:var(--mono);font-size:12px;color:var(--text-dim);padding:10px 0 0;" id="summary-text"></div>
     </div>
+
+    <!-- LLM insight panels -->
+    <div id="llm-notes-section"></div>
+    <div id="llm-header-mapping-section"></div>
+    <div id="llm-dq-summary-section"></div>
+    <div id="llm-validation-section"></div>
 
     <!-- DQ errors -->
     <div id="dq-error-section"></div>
@@ -592,6 +659,12 @@
     if (b < 1024) return b + ' B';
     if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
     return (b/1048576).toFixed(1) + ' MB';
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+    ));
   }
 
   // ── Pipeline ──
@@ -681,6 +754,77 @@
     document.getElementById('stat-dq').textContent      = (r.dq_errors || []).length;
     document.getElementById('summary-text').textContent = r.summary || '';
 
+    // LLM status badge
+    const badgeEl = document.getElementById('llm-status-badge');
+    if (r.llm_enabled) {
+      badgeEl.innerHTML = '<span class="llm-badge">● LLM ON · sonnet-4-6</span>';
+    } else {
+      badgeEl.innerHTML = '<span class="llm-badge off">● LLM OFF · set ANTHROPIC_API_KEY</span>';
+    }
+
+    // LLM notes
+    const notesEl = document.getElementById('llm-notes-section');
+    if (r.llm_notes && r.llm_notes.length) {
+      notesEl.innerHTML = `
+        <div class="llm-panel">
+          <div class="llm-head">Agent Notes</div>
+          <div class="llm-body">
+            ${r.llm_notes.map(n => `<div class="llm-item">${escapeHtml(n)}</div>`).join('')}
+          </div>
+        </div>`;
+    } else { notesEl.innerHTML = ''; }
+
+    // Header mapping
+    const hmEl = document.getElementById('llm-header-mapping-section');
+    if (r.header_mapping && Object.keys(r.header_mapping).length) {
+      hmEl.innerHTML = `
+        <div class="llm-panel">
+          <div class="llm-head">Agent 1 — Column Resolution</div>
+          <div class="llm-body">
+            ${Object.entries(r.header_mapping).map(([raw, canonical]) =>
+              `<div class="llm-item"><strong>${escapeHtml(raw)}</strong> → ${escapeHtml(canonical)}</div>`
+            ).join('')}
+          </div>
+        </div>`;
+    } else { hmEl.innerHTML = ''; }
+
+    // DQ LLM summary
+    const dqSumEl = document.getElementById('llm-dq-summary-section');
+    if (r.dq_llm_summary && r.dq_llm_summary.length) {
+      dqSumEl.innerHTML = `
+        <div class="llm-panel warn">
+          <div class="llm-head">Agent 2 — DQ Summary</div>
+          <div class="llm-body">
+            ${r.dq_llm_summary.map(s => `
+              <div class="llm-item">
+                <strong>[${escapeHtml(String(s.severity || ''))}]</strong>
+                ${escapeHtml(String(s.field || ''))}: ${escapeHtml(String(s.issue || ''))}
+                <span style="color:var(--text-mono)">(${s.count ?? 0})</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+    } else { dqSumEl.innerHTML = ''; }
+
+    // Validation root cause
+    const vEl = document.getElementById('llm-validation-section');
+    if (r.validation_llm_analysis && r.validation_llm_analysis.length) {
+      vEl.innerHTML = `
+        <div class="llm-panel warn">
+          <div class="llm-head">Agent 5 — Validation Root Cause</div>
+          <div class="llm-body">
+            ${r.validation_llm_analysis.map(a => `
+              <div class="llm-item">
+                <strong>${escapeHtml(String(a.issue || ''))}</strong> — ${escapeHtml(String(a.root_cause || ''))}
+                <span class="${a.recommendation === 'reprocess' ? 'rec-reprocess' : 'rec-manual'}">
+                  → ${escapeHtml(String(a.recommendation || ''))}
+                </span>
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+    } else { vEl.innerHTML = ''; }
+
     // DQ errors
     const dqEl = document.getElementById('dq-error-section');
     if (r.dq_errors && r.dq_errors.length) {
@@ -747,6 +891,8 @@
     document.getElementById('output-card').style.display = 'none';
     document.getElementById('dq-error-section').innerHTML = '';
     document.getElementById('row-error-section').innerHTML = '';
+    ['llm-notes-section','llm-header-mapping-section','llm-dq-summary-section','llm-validation-section']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
     ['s1','s2','s3','s4','s5'].forEach(id => {
       const el = document.getElementById(id);
       el.classList.remove('active','done','error-step');
