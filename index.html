@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Insurance ETL Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:       #0f1f3d;
+    --navy-mid:   #1a3260;
+    --navy-light: #243f78;
+    --accent:     #2dd4bf;
+    --accent-dim: #14b8a6;
+    --gold:       #f59e0b;
+    --red:        #f87171;
+    --red-bg:     #3b0f0f;
+    --green:      #4ade80;
+    --green-bg:   #0f2a1a;
+    --amber:      #fbbf24;
+    --amber-bg:   #2d1f00;
+    --surface:    #111d35;
+    --surface2:   #162240;
+    --surface3:   #1c2d52;
+    --border:     #243f78;
+    --text:       #e2e8f0;
+    --text-dim:   #94a3b8;
+    --text-mono:  #7dd3fc;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--navy);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(45,212,191,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(45,212,191,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Layout ── */
+  .shell {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* ── Header ── */
+  header {
+    margin-bottom: 48px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(45,212,191,0.08);
+    border: 1px solid rgba(45,212,191,0.2);
+    border-radius: 4px;
+    padding: 4px 10px;
+    margin-bottom: 16px;
+  }
+  .badge::before { content: '●'; font-size: 8px; }
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(22px, 4vw, 32px);
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.2;
+    margin-bottom: 10px;
+    letter-spacing: -0.02em;
+  }
+  h1 span { color: var(--accent); }
+  .subtitle {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    max-width: 560px;
+  }
+
+  /* ── Pipeline steps indicator ── */
+  .steps {
+    display: flex;
+    gap: 0;
+    margin-bottom: 40px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .step {
+    flex: 1;
+    padding: 10px 8px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+    border-right: 1px solid var(--border);
+    transition: all 0.3s;
+    position: relative;
+  }
+  .step:last-child { border-right: none; }
+  .step .num {
+    display: block;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 2px;
+    color: var(--navy-light);
+    transition: color 0.3s;
+  }
+  .step.active { background: rgba(45,212,191,0.06); }
+  .step.active .num { color: var(--accent); }
+  .step.done { background: rgba(74,222,128,0.04); }
+  .step.done .num { color: var(--green); }
+  .step.error-step { background: rgba(248,113,113,0.06); }
+  .step.error-step .num { color: var(--red); }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px;
+    margin-bottom: 20px;
+    transition: border-color 0.3s;
+  }
+  .card:hover { border-color: rgba(45,212,191,0.3); }
+  .card-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+
+  /* ── Upload zone ── */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(45,212,191,0.04);
+  }
+  .drop-zone input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+  .drop-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+    display: block;
+  }
+  .drop-label {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .drop-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+  .file-selected {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-top: 16px;
+  }
+  .file-selected.show { display: flex; }
+  .file-icon { font-size: 20px; }
+  .file-name { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .file-size { font-size: 11px; color: var(--text-dim); }
+
+  /* ── Run button ── */
+  .btn-run {
+    width: 100%;
+    margin-top: 20px;
+    padding: 14px;
+    background: var(--accent);
+    color: var(--navy);
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-run:hover:not(:disabled) {
+    background: #5eead4;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(45,212,191,0.3);
+  }
+  .btn-run:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* ── Progress / spinner ── */
+  .progress-block { display: none; }
+  .progress-block.show { display: block; }
+  .progress-bar-wrap {
+    height: 4px;
+    background: var(--surface3);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 12px 0;
+  }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--gold));
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+  .progress-label {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* ── Results ── */
+  .results { display: none; }
+  .results.show { display: block; }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+  }
+  .stat-val {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .stat-val.green { color: var(--green); }
+  .stat-val.red   { color: var(--red); }
+  .stat-val.amber { color: var(--amber); }
+  .stat-val.blue  { color: var(--text-mono); }
+  .stat-label { font-size: 11px; color: var(--text-dim); letter-spacing: 0.05em; text-transform: uppercase; }
+
+  /* ── Error list ── */
+  .error-section { margin-bottom: 20px; }
+  .error-header {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 8px 12px;
+    border-radius: 4px 4px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .error-header.blocking { background: var(--red-bg); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
+  .error-header.warning  { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(251,191,36,0.2); }
+  .error-list {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .error-item {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(36,63,120,0.5);
+    line-height: 1.5;
+  }
+  .error-item:last-child { border-bottom: none; }
+  .error-item .row-tag {
+    color: var(--red);
+    font-weight: 600;
+    margin-right: 6px;
+  }
+
+  /* ── Output preview ── */
+  .output-preview {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .output-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface3);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .output-lines {
+    padding: 16px;
+    max-height: 240px;
+    overflow-y: auto;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 2;
+    letter-spacing: 0.03em;
+  }
+  .output-line {
+    display: flex;
+    gap: 16px;
+    color: var(--text-mono);
+  }
+  .output-line .ln { color: var(--navy-light); width: 28px; text-align: right; flex-shrink: 0; }
+  .output-line.trailer { color: var(--gold); }
+
+  /* ── Download button ── */
+  .btn-download {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px;
+    background: transparent;
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+  }
+  .btn-download:hover {
+    background: rgba(45,212,191,0.08);
+    box-shadow: 0 0 20px rgba(45,212,191,0.15);
+  }
+
+  /* ── Field spec panel ── */
+  .spec-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .spec-table th {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .spec-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid rgba(36,63,120,0.4);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .spec-table tr:last-child td { border-bottom: none; }
+  .spec-table td:first-child { color: var(--text); font-weight: 500; }
+  .spec-table td.pos { color: var(--accent); }
+  .spec-table td.src { color: var(--text-mono); }
+
+  /* Reset link */
+  .reset-link {
+    display: block;
+    text-align: center;
+    margin-top: 24px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .reset-link:hover { color: var(--accent); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Header -->
+  <header>
+    <div class="badge">Multi-Agent ETL Pipeline</div>
+    <h1>Insurance <span>ETL</span> Engine</h1>
+    <p class="subtitle">Upload a carrier data file. Five specialized agents run quality checks, transform fields, encode to fixed-width spec, and validate the output.</p>
+  </header>
+
+  <!-- Pipeline steps -->
+  <div class="steps">
+    <div class="step" id="s1"><span class="num">01</span>Ingest</div>
+    <div class="step" id="s2"><span class="num">02</span>Quality</div>
+    <div class="step" id="s3"><span class="num">03</span>Transform</div>
+    <div class="step" id="s4"><span class="num">04</span>Encode</div>
+    <div class="step" id="s5"><span class="num">05</span>Validate</div>
+  </div>
+
+  <!-- Upload card -->
+  <div class="card" id="upload-card">
+    <div class="card-title">// Input File</div>
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" id="file-input" accept=".xlsx,.xls,.csv"/>
+      <span class="drop-icon">📂</span>
+      <div class="drop-label">Drop your Excel file here</div>
+      <div class="drop-sub">or click to browse · .xlsx / .xls / .csv</div>
+    </div>
+    <div class="file-selected" id="file-info">
+      <span class="file-icon">📊</span>
+      <div>
+        <div class="file-name" id="file-name-label">—</div>
+        <div class="file-size" id="file-size-label">—</div>
+      </div>
+    </div>
+    <button class="btn-run" id="run-btn" disabled onclick="runPipeline()">
+      ▶ Run Pipeline
+    </button>
+  </div>
+
+  <!-- Progress -->
+  <div class="card progress-block" id="progress-card">
+    <div class="card-title">// Processing</div>
+    <div class="progress-label" id="progress-label">Initializing…</div>
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+  </div>
+
+  <!-- Results -->
+  <div class="results" id="results-section">
+
+    <!-- Stats -->
+    <div class="card">
+      <div class="card-title">// Run Summary</div>
+      <div class="stat-grid">
+        <div class="stat">
+          <div class="stat-val blue" id="stat-total">—</div>
+          <div class="stat-label">Input Rows</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val green" id="stat-success">—</div>
+          <div class="stat-label">Encoded</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val red" id="stat-errors">—</div>
+          <div class="stat-label">Row Errors</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val amber" id="stat-dq">—</div>
+          <div class="stat-label">DQ Flags</div>
+        </div>
+      </div>
+      <div style="font-family:var(--mono);font-size:12px;color:var(--text-dim);padding:10px 0 0;" id="summary-text"></div>
+    </div>
+
+    <!-- DQ errors -->
+    <div id="dq-error-section"></div>
+
+    <!-- Row errors -->
+    <div id="row-error-section"></div>
+
+    <!-- Output preview -->
+    <div class="card" id="output-card" style="display:none">
+      <div class="card-title">// Encoded Output</div>
+      <div class="output-preview">
+        <div class="output-toolbar">
+          <span>38-char fixed-width · UTF-8</span>
+          <span id="record-count-label">0 records</span>
+        </div>
+        <div class="output-lines" id="output-lines"></div>
+      </div>
+      <a class="btn-download" id="download-btn" href="#" onclick="downloadOutput(event)">
+        ⬇ Download Encoded Output (.txt)
+      </a>
+    </div>
+
+  </div>
+
+  <!-- Field spec reference -->
+  <div class="card" style="margin-top:32px;">
+    <div class="card-title">// Record Layout — 38 Characters</div>
+    <table class="spec-table">
+      <thead>
+        <tr><th>Field</th><th>Source Col</th><th>Pos</th><th>Len</th><th>Transform</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Company Code</td>    <td class="src">company_code</td>      <td class="pos">1–4</td>   <td>4</td><td>Zero-pad</td></tr>
+        <tr><td>State Code</td>      <td class="src">state_code</td>        <td class="pos">5–6</td>   <td>2</td><td>Name/abbr → 01–52</td></tr>
+        <tr><td>Inception Date</td>  <td class="src">inception_date</td>    <td class="pos">7–12</td>  <td>6</td><td>→ MMDDYY</td></tr>
+        <tr><td>Expiration Date</td> <td class="src">expiration_date</td>   <td class="pos">13–18</td> <td>6</td><td>→ MMDDYY, must be after inception</td></tr>
+        <tr><td>Line of Business</td><td class="src">line_of_business</td>  <td class="pos">19–20</td> <td>2</td><td>Auto→01 HO→02 Dwelling→03</td></tr>
+        <tr><td>Transaction Type</td><td class="src">transaction_type</td>  <td class="pos">21–22</td> <td>2</td><td>Premium→01 PaidLoss→05 OS→06</td></tr>
+        <tr><td>Amount</td>          <td class="src">amount</td>            <td class="pos">23–30</td> <td>8</td><td>Ceiling + zero-pad; neg → letter suffix</td></tr>
+        <tr><td>Policy Code</td>     <td class="src">policy_code</td>       <td class="pos">31–38</td> <td>8</td><td>Uppercase passthrough</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <a class="reset-link" onclick="resetApp()">↺ Reset and upload another file</a>
+
+</div>
+
+<script>
+  let selectedFile = null;
+  let outputContent = "";
+
+  // ── Drag & drop ──
+  const dz = document.getElementById('drop-zone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  document.getElementById('file-input').addEventListener('change', e => {
+    if (e.target.files[0]) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(f) {
+    selectedFile = f;
+    document.getElementById('file-name-label').textContent = f.name;
+    document.getElementById('file-size-label').textContent = formatBytes(f.size);
+    document.getElementById('file-info').classList.add('show');
+    document.getElementById('run-btn').disabled = false;
+  }
+
+  function formatBytes(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+    return (b/1048576).toFixed(1) + ' MB';
+  }
+
+  // ── Pipeline ──
+  async function runPipeline() {
+    if (!selectedFile) return;
+
+    // Reset UI
+    document.getElementById('results-section').classList.remove('show');
+    document.getElementById('output-card').style.display = 'none';
+    document.getElementById('dq-error-section').innerHTML = '';
+    document.getElementById('row-error-section').innerHTML = '';
+    document.getElementById('run-btn').disabled = true;
+
+    // Show progress
+    const progressCard = document.getElementById('progress-card');
+    progressCard.classList.add('show');
+
+    const steps_el = ['s1','s2','s3','s4','s5'];
+    const labels = [
+      'Agent 1 — Ingesting file…',
+      'Agent 2 — Running data quality checks…',
+      'Agent 3 — Transforming fields…',
+      'Agent 4 — Encoding to fixed-width…',
+      'Agent 5 — Validating output…',
+    ];
+
+    async function animateSteps(result) {
+      for (let i = 0; i < steps_el.length; i++) {
+        setStep(i, 'active');
+        setProgress(labels[i], (i+1) * 20);
+        await delay(480);
+        // Stop at quality if blocking col error
+        if (i === 1 && result.dq_errors.some(e => !e.row && e.severity === 'blocking')) {
+          setStep(i, 'error-step');
+          break;
+        }
+        setStep(i, 'done');
+      }
+    }
+
+    function setStep(idx, cls) {
+      const el = document.getElementById(steps_el[idx]);
+      el.classList.remove('active','done','error-step');
+      el.classList.add(cls);
+    }
+    function setProgress(label, pct) {
+      document.getElementById('progress-label').textContent = label;
+      document.getElementById('progress-bar').style.width = pct + '%';
+    }
+    function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    // Read file as base64
+    const b64 = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result.split(',')[1]);
+      reader.readAsDataURL(selectedFile);
+    });
+
+    let result;
+    try {
+      const resp = await fetch('/api/pipeline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: b64, filename: selectedFile.name }),
+      });
+      result = await resp.json();
+    } catch (err) {
+      result = { status: 'error', summary: 'Network error: ' + err.message,
+                 dq_errors: [], transform_errors: [], validation_errors: [],
+                 total_input_rows: 0, successful_records: 0, encoded_output: '' };
+    }
+
+    await animateSteps(result);
+    await delay(300);
+    progressCard.classList.remove('show');
+    renderResults(result);
+  }
+
+  function renderResults(r) {
+    document.getElementById('results-section').classList.add('show');
+
+    // Stats
+    const totalErrors = (r.transform_errors || []).length + (r.validation_errors || []).length;
+    document.getElementById('stat-total').textContent   = r.total_input_rows ?? '—';
+    document.getElementById('stat-success').textContent = r.successful_records ?? '0';
+    document.getElementById('stat-errors').textContent  = totalErrors;
+    document.getElementById('stat-dq').textContent      = (r.dq_errors || []).length;
+    document.getElementById('summary-text').textContent = r.summary || '';
+
+    // DQ errors
+    const dqEl = document.getElementById('dq-error-section');
+    if (r.dq_errors && r.dq_errors.length) {
+      dqEl.innerHTML = `
+        <div class="error-section">
+          <div class="error-header blocking">⛔ Data Quality Errors (${r.dq_errors.length})</div>
+          <div class="error-list">${r.dq_errors.map(e =>
+            `<div class="error-item">${e.row ? `<span class="row-tag">Row ${e.row}</span>` : ''}${e.message || JSON.stringify(e)}</div>`
+          ).join('')}</div>
+        </div>`;
+    }
+
+    // Row/transform errors
+    const rowEl = document.getElementById('row-error-section');
+    const allRowErrors = [...(r.transform_errors || []), ...(r.validation_errors || [])];
+    if (allRowErrors.length) {
+      rowEl.innerHTML = `
+        <div class="error-section">
+          <div class="error-header warning">⚠ Transform / Validation Errors (${allRowErrors.length})</div>
+          <div class="error-list">${allRowErrors.map(e =>
+            `<div class="error-item">${e}</div>`
+          ).join('')}</div>
+        </div>`;
+    }
+
+    // Output
+    if (r.encoded_output) {
+      outputContent = r.encoded_output;
+      const lines = r.encoded_output.split('\n').filter(Boolean);
+      const outputEl = document.getElementById('output-lines');
+      outputEl.innerHTML = lines.map((line, i) => {
+        const isTrailer = line.startsWith('TRAILER');
+        return `<div class="output-line${isTrailer ? ' trailer' : ''}">
+          <span class="ln">${isTrailer ? '—' : i+1}</span>
+          <span>${line}</span>
+        </div>`;
+      }).join('');
+      document.getElementById('record-count-label').textContent =
+        `${r.successful_records} record${r.successful_records !== 1 ? 's' : ''} + trailer`;
+      document.getElementById('output-card').style.display = 'block';
+    }
+  }
+
+  function downloadOutput(e) {
+    e.preventDefault();
+    if (!outputContent) return;
+    const blob = new Blob([outputContent], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'encoded_output.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function resetApp() {
+    selectedFile = null;
+    outputContent = '';
+    document.getElementById('file-input').value = '';
+    document.getElementById('file-info').classList.remove('show');
+    document.getElementById('run-btn').disabled = true;
+    document.getElementById('results-section').classList.remove('show');
+    document.getElementById('progress-card').classList.remove('show');
+    document.getElementById('output-card').style.display = 'none';
+    document.getElementById('dq-error-section').innerHTML = '';
+    document.getElementById('row-error-section').innerHTML = '';
+    ['s1','s2','s3','s4','s5'].forEach(id => {
+      const el = document.getElementById(id);
+      el.classList.remove('active','done','error-step');
+    });
+  }
+</script>
+</body>
+</html>

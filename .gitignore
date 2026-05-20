@@ -1,0 +1,11 @@
+.env
+.env.local
+__pycache__/
+*.pyc
+*.pyo
+.vercel
+node_modules/
+.DS_Store
+output/
+logs/
+*.log
