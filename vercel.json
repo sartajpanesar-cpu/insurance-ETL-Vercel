@@ -1,10 +1,15 @@
 {
   "version": 2,
-  "functions": {
-    "api/pipeline.py": {
-      "runtime": "@vercel/python"
+  "builds": [
+    {
+      "src": "api/pipeline.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
     }
-  },
+  ],
   "routes": [
     {
       "src": "/api/pipeline",
