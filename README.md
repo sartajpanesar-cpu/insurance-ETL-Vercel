@@ -1,4 +1,4 @@
-# Insurance ETL — Vercel deployment
+# Insurance ETL — Vercel deployment 
 
 LLM-assisted multi-agent ETL pipeline for insurance transaction data. Upload a carrier Excel file; the pipeline runs five agents (ingestion → quality → transform → encode → validate) and returns a 38-character fixed-width output file plus a record-count trailer.
 
