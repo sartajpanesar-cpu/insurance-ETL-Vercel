@@ -2,7 +2,7 @@
 
 A multi-agent LLM-assisted ETL pipeline for insurance transaction data. Upload a carrier Excel file, run five specialized agents in sequence, and download a fixed-width encoded output file.
 
-**Live demo:** [your-vercel-url.vercel.app]
+**Live demo:** [https://insuranceetlvercel.vercel.app/]
 
 ---
 
